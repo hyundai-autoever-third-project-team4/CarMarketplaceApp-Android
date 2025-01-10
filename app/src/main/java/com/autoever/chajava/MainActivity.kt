@@ -41,7 +41,7 @@ class MainActivity : AppCompatActivity() {
         webSettings.javaScriptEnabled = true // JavaScript 사용 허용
 
         // 웹 페이지 로드
-        webView.loadUrl("https://theaterup.site/")
+        webView.loadUrl("https://chajava.store/")
 
         // 3초 후에 fade out 애니메이션 실행
         Handler().postDelayed({
