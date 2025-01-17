@@ -5,6 +5,7 @@ import android.content.SharedPreferences
 import android.net.ConnectivityManager
 import android.os.Bundle
 import android.os.Handler
+import android.util.Log
 import android.view.View
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
@@ -19,6 +20,12 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.ImageView
 import android.widget.Toast
+import com.google.android.gms.tasks.OnCompleteListener
+import com.google.firebase.messaging.FirebaseMessaging
+import java.io.OutputStream
+import java.net.HttpURLConnection
+import java.net.URL
+import java.time.LocalDateTime
 
 class MainActivity : AppCompatActivity() {
     private lateinit var webView: WebView
@@ -61,6 +68,8 @@ class MainActivity : AppCompatActivity() {
             fadeOut(splashView)
         }, 3000) // 3000ms = 3초
 
+        //등록된 토큰 받아오기 - 수정 예정
+        updateToken()
     }
 
     private fun fadeOut(view: View) {
@@ -99,4 +108,61 @@ class MainActivity : AppCompatActivity() {
             super.onBackPressed() // 기본 동작 수행
         }
     }
+
+    // 파이어베이스에서 fcm 토큰 검색
+    private fun updateToken(){
+        FirebaseMessaging.getInstance().token.addOnCompleteListener(OnCompleteListener { task ->
+            if (!task.isSuccessful) {
+                Log.w("Firebase", "Fetching FCM registration token failed", task.exception)
+                return@OnCompleteListener
+            }
+
+            val token = task.result
+            Log.d("Firebase", "get token: $token")
+            sendRegistrationToServer(token)
+        })
+    }
+
+
+}
+
+// 백엔드로 토큰 저장 요청
+fun sendRegistrationToServer(token: String){
+    val currentTime = LocalDateTime.now()
+
+    val serverUrl = "https://chajava.store/api/firebase/token"
+
+    Thread{
+        try{
+            val url = URL(serverUrl)
+            val conn = url.openConnection() as HttpURLConnection
+            conn.requestMethod = "POST"
+            conn.setRequestProperty("Content-Type", "application/json")
+            conn.doOutput = true
+
+            val userId = "tester"
+            val payload = """
+                    {
+                        "userId": "$userId",
+                        "token": "$token",
+                        "currentTime": "$currentTime"
+                    }
+                """.trimIndent()
+
+            conn.outputStream.use { os: OutputStream ->
+                os.write(payload.toByteArray())
+                os.flush()
+            }
+
+            val responseCode = conn.responseCode
+            if (responseCode == HttpURLConnection.HTTP_OK) {
+                Log.d("Firebase", "FCM Token successfully sent to the server.")
+            } else {
+                Log.e("Firebase", "Failed to send FCM Token. Response Code: $responseCode")
+            }
+        }catch (e: Exception) {
+            Log.e("Firebase", "Error sending FCM Token to server", e)
+        }
+    }.start()
+
 }
