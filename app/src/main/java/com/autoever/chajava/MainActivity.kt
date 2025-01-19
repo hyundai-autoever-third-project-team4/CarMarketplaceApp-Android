@@ -1,11 +1,13 @@
 package com.autoever.chajava
 
 import android.content.Context
+import android.content.Intent
 import android.content.SharedPreferences
+import android.content.pm.PackageManager
 import android.net.ConnectivityManager
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
-import android.util.Log
 import android.view.View
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
@@ -20,17 +22,15 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.ImageView
 import android.widget.Toast
-import com.google.android.gms.tasks.OnCompleteListener
-import com.google.firebase.messaging.FirebaseMessaging
-import java.io.OutputStream
-import java.net.HttpURLConnection
-import java.net.URL
-import java.time.LocalDateTime
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 
 class MainActivity : AppCompatActivity() {
     private lateinit var webView: WebView
     private lateinit var splashView: ImageView
     private lateinit var sharedPreferences: SharedPreferences
+
+    private val NOTIFICATION_PERMISSION_REQUEST_CODE = 1
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -55,10 +55,31 @@ class MainActivity : AppCompatActivity() {
         val webSettings: WebSettings = webView.settings
         webSettings.javaScriptEnabled = true // JavaScript 사용 허용
         webSettings.domStorageEnabled = true // DOM 저장소 사용 허용
+        webView.addJavascriptInterface(WebAppInterface(this), "Android") //웹뷰에서 WebAppInterface 함수 호출 허용
+
+        // 알림 권한 요청
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(
+                    this,
+                    android.Manifest.permission.POST_NOTIFICATIONS
+                ) != PackageManager.PERMISSION_GRANTED
+            ) {
+                // 권한이 없으면 요청
+                ActivityCompat.requestPermissions(
+                    this,
+                    arrayOf(android.Manifest.permission.POST_NOTIFICATIONS),
+                    NOTIFICATION_PERMISSION_REQUEST_CODE
+                )
+            }
+        }
+
+        // 알림을 눌러 들어오는 경우
+        val notificationUrl = intent.getStringExtra("url")
+        val urlToLoad = notificationUrl ?: "https://chajava.store/"
 
         // 웹 페이지 로드 전에 인터넷 연결 확인
         if (hasInternetConnection()) {
-            webView.loadUrl("https://chajava.store/")
+            webView.loadUrl(urlToLoad)
         } else {
             Toast.makeText(this, "인터넷 연결이 필요합니다.", Toast.LENGTH_SHORT).show()
         }
@@ -67,9 +88,6 @@ class MainActivity : AppCompatActivity() {
         Handler().postDelayed({
             fadeOut(splashView)
         }, 3000) // 3000ms = 3초
-
-        //등록된 토큰 받아오기 - 수정 예정
-        updateToken()
     }
 
     private fun fadeOut(view: View) {
@@ -91,6 +109,7 @@ class MainActivity : AppCompatActivity() {
         })
 
         view.startAnimation(fadeOutAnimation)
+
     }
 
     // 인터넷 연결 확인
@@ -109,60 +128,12 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // 파이어베이스에서 fcm 토큰 검색
-    private fun updateToken(){
-        FirebaseMessaging.getInstance().token.addOnCompleteListener(OnCompleteListener { task ->
-            if (!task.isSuccessful) {
-                Log.w("Firebase", "Fetching FCM registration token failed", task.exception)
-                return@OnCompleteListener
-            }
-
-            val token = task.result
-            Log.d("Firebase", "get token: $token")
-            sendRegistrationToServer(token)
-        })
-    }
-
-
-}
-
-// 백엔드로 토큰 저장 요청
-fun sendRegistrationToServer(token: String){
-    val currentTime = LocalDateTime.now()
-
-    val serverUrl = "https://chajava.store/api/firebase/token"
-
-    Thread{
-        try{
-            val url = URL(serverUrl)
-            val conn = url.openConnection() as HttpURLConnection
-            conn.requestMethod = "POST"
-            conn.setRequestProperty("Content-Type", "application/json")
-            conn.doOutput = true
-
-            val userId = "tester"
-            val payload = """
-                    {
-                        "userId": "$userId",
-                        "token": "$token",
-                        "currentTime": "$currentTime"
-                    }
-                """.trimIndent()
-
-            conn.outputStream.use { os: OutputStream ->
-                os.write(payload.toByteArray())
-                os.flush()
-            }
-
-            val responseCode = conn.responseCode
-            if (responseCode == HttpURLConnection.HTTP_OK) {
-                Log.d("Firebase", "FCM Token successfully sent to the server.")
-            } else {
-                Log.e("Firebase", "Failed to send FCM Token. Response Code: $responseCode")
-            }
-        }catch (e: Exception) {
-            Log.e("Firebase", "Error sending FCM Token to server", e)
+    // url intent 체크
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        val notificationUrl = intent.getStringExtra("url")
+        if (!notificationUrl.isNullOrEmpty()){
+            webView.loadUrl(notificationUrl)
         }
-    }.start()
-
+    }
 }
