@@ -3,7 +3,6 @@ package com.autoever.chajava
 import android.content.Context
 import android.util.Log
 import android.webkit.JavascriptInterface
-import android.widget.Toast
 import com.google.android.gms.tasks.OnCompleteListener
 import com.google.firebase.messaging.FirebaseMessaging
 import java.io.OutputStream
@@ -12,10 +11,11 @@ import java.net.URL
 import java.time.LocalDateTime
 
 // 웹뷰에서 호출하는 함수
-class WebAppInterface(private val context: Context) {
+class Web2AppInterface(private val context: Context) {
     // 로그인 했을 때 & 앱 시작 시 자동 로그인 된 때 호출
     @JavascriptInterface
     fun getToken(userId: Long){
+        Log.d("일단 받긴 했어",userId.toString());
         FirebaseMessaging.getInstance().token.addOnCompleteListener(OnCompleteListener { task ->
             if (!task.isSuccessful) {
                 Log.w("Firebase", "Fetching FCM registration token failed", task.exception)

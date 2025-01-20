@@ -75,6 +75,7 @@ class MainActivity : AppCompatActivity() {
         webSettings.javaScriptCanOpenWindowsAutomatically = true  // 추가
         webSettings.allowFileAccess = true  // 추가
         webView.addJavascriptInterface(WebAppInterface(this), "Android") //웹뷰에서 WebAppInterface 함수 호출 허용
+        webView.addJavascriptInterface(Web2AppInterface(this), "Android2") //웹뷰에서 WebAppInterface 함수 호출 허용
 
         // 알림 권한 요청
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
