@@ -88,6 +88,8 @@ class MainActivity : AppCompatActivity() {
         Handler().postDelayed({
             fadeOut(splashView)
         }, 3000) // 3000ms = 3초
+
+        WebAppInterface(this).getToken(1)
     }
 
     private fun fadeOut(view: View) {

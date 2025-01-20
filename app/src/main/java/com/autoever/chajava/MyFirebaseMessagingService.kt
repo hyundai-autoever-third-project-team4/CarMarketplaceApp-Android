@@ -5,7 +5,6 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
-import android.graphics.BitmapFactory
 import android.os.Build
 import android.util.Log
 import androidx.core.app.NotificationCompat
@@ -26,12 +25,12 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
     override fun onMessageReceived(remoteMessage: RemoteMessage) {
         super.onMessageReceived(remoteMessage)
 
+        // 알림 채널 생성
+        createNotificationChannel()
+
         // 데이터 페이로드 확인
         val url = remoteMessage.data["url"]
         if (!url.isNullOrEmpty()) {
-            // 알림 채널 생성
-            createNotificationChannel()
-
             // 알림 클릭 시 실행할 Intent 설정
             val intent = Intent(this, MainActivity::class.java).apply {
                 putExtra("url", url)
@@ -54,6 +53,17 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
             val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             notificationManager.notify(NOTIFICATION_ID, notification)
 
+        }else{
+            // NotificationManager로 커스텀 알림을 생성
+            val notification = NotificationCompat.Builder(this, CHANNEL_ID)
+                .setSmallIcon(R.mipmap.ic_launcher)
+                .setContentTitle(remoteMessage.notification?.title)
+                .setContentText(remoteMessage.notification?.body)
+                .setAutoCancel(true)
+                .build()
+
+            val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            notificationManager.notify(NOTIFICATION_ID, notification)
         }
     }
 
