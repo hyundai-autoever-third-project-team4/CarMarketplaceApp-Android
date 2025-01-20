@@ -59,7 +59,8 @@ class WebAppInterface(private val context: Context) {
 // 서버에 토큰 저장 요청
 fun sendTokenToServer(userId: Long, token: String) {
     val currentTime = LocalDateTime.now()
-    val serverUrl = URL("https://chajava.store/api/fcm/save")
+    //val serverUrl = URL("https://chajava.store/api/fcm/save")
+    val serverUrl = URL("http://10.0.2.2:8081/fcm/save")
     val conn = serverUrl.openConnection() as HttpURLConnection
 
     val saveThread = Thread {
@@ -98,7 +99,8 @@ fun sendTokenToServer(userId: Long, token: String) {
 }
 
 fun deleteTokenAtServer(token: String){
-    val serverUrl = URL("https://chajava.store/api/fcm/delete/$token")
+    //val serverUrl = URL("https://chajava.store/api/fcm/delete/$token")
+    val serverUrl = URL("http://10.0.2.2:8081/fcm/delete/$token")
     val conn = serverUrl.openConnection() as HttpURLConnection
 
     Thread{
