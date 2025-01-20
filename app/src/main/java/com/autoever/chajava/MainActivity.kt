@@ -4,6 +4,8 @@ import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
 import android.content.pm.PackageManager
+import android.net.ConnectivityManager
+import android.os.Build
 import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
@@ -31,6 +33,8 @@ import android.util.Base64
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.InputStream
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 
 class MainActivity : AppCompatActivity() {
     private lateinit var webView: WebView
@@ -39,6 +43,7 @@ class MainActivity : AppCompatActivity() {
     private var currentCameraIndex = 0
     private val CAMERA_PERMISSION_CODE = 100
     private val REQUEST_IMAGE_CAPTURE = 1
+    private val NOTIFICATION_PERMISSION_REQUEST_CODE = 1
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -63,7 +68,23 @@ class MainActivity : AppCompatActivity() {
         webSettings.domStorageEnabled = true
         webSettings.javaScriptCanOpenWindowsAutomatically = true  // 추가
         webSettings.allowFileAccess = true  // 추가
+        webView.addJavascriptInterface(WebAppInterface(this), "Android") //웹뷰에서 WebAppInterface 함수 호출 허용
 
+        // 알림 권한 요청
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(
+                    this,
+                    android.Manifest.permission.POST_NOTIFICATIONS
+                ) != PackageManager.PERMISSION_GRANTED
+            ) {
+                // 권한이 없으면 요청
+                ActivityCompat.requestPermissions(
+                    this,
+                    arrayOf(android.Manifest.permission.POST_NOTIFICATIONS),
+                    NOTIFICATION_PERMISSION_REQUEST_CODE
+                )
+            }
+        }
 
         webView.webViewClient = object : WebViewClient() {
             override fun onPageFinished(view: WebView?, url: String?) {
@@ -77,8 +98,19 @@ class MainActivity : AppCompatActivity() {
                 )
             }
         }
+
         webView.addJavascriptInterface(WebAppInterface(this), "Android")
-        webView.loadUrl("https://chajava.store/")
+
+        // 알림을 눌러 들어오는 경우
+        val notificationUrl = intent.getStringExtra("url")
+        val urlToLoad = notificationUrl ?: "https://chajava.store/"
+
+        // 웹 페이지 로드 전에 인터넷 연결 확인
+        if (hasInternetConnection()) {
+            webView.loadUrl(urlToLoad)
+        } else {
+            Toast.makeText(this, "인터넷 연결이 필요합니다.", Toast.LENGTH_SHORT).show()
+        }
 
         // Splash 애니메이션
         Handler().postDelayed({ fadeOut(splashView) }, 3000)
@@ -90,6 +122,13 @@ class MainActivity : AppCompatActivity() {
         } else {
             super.onBackPressed() // 기본 동작 수행
         }
+    }
+
+    // 인터넷 연결 확인
+    private fun hasInternetConnection(): Boolean {
+        val connectivityManager = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+        val networkInfo = connectivityManager.activeNetworkInfo
+        return networkInfo != null && networkInfo.isConnected
     }
 
     private fun fadeOut(view: View) {
@@ -152,7 +191,6 @@ class MainActivity : AppCompatActivity() {
                 )
             }
         }
-
     }
 
     private fun startCamera() {
@@ -172,6 +210,15 @@ class MainActivity : AppCompatActivity() {
                 grantResults[0] == PackageManager.PERMISSION_GRANTED) {
                 startCamera()
             }
+        }
+    }
+
+    // url intent 체크
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        val notificationUrl = intent.getStringExtra("url")
+        if (!notificationUrl.isNullOrEmpty()){
+            webView.loadUrl(notificationUrl)
         }
     }
 
