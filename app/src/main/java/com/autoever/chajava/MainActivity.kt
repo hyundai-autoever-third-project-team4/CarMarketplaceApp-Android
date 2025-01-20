@@ -30,6 +30,7 @@ import android.widget.Toast
 import android.Manifest
 import android.app.AlertDialog
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.util.Base64
 import android.webkit.JsResult
 import android.webkit.WebChromeClient
@@ -45,7 +46,9 @@ class MainActivity : AppCompatActivity() {
     private lateinit var sharedPreferences: SharedPreferences
     private var currentCameraIndex = 0
     private val CAMERA_PERMISSION_CODE = 100
+    private val STORAGE_PERMISSION_CODE = 101
     private val REQUEST_IMAGE_CAPTURE = 1
+    private val REQUEST_PICK_IMAGE = 2
     private val NOTIFICATION_PERMISSION_REQUEST_CODE = 1
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -189,30 +192,43 @@ class MainActivity : AppCompatActivity() {
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
 
-        if (requestCode == REQUEST_IMAGE_CAPTURE && resultCode == RESULT_OK) {
-            val imageBitmap = data?.extras?.get("data") as Bitmap
-
-            val outputStream = ByteArrayOutputStream()
-            imageBitmap.compress(Bitmap.CompressFormat.JPEG, 100, outputStream)
-            val byteArray = outputStream.toByteArray()
-            val base64Image = Base64.encodeToString(byteArray, Base64.DEFAULT)
-
-            val sanitizedBase64Image = base64Image
-                .replace("\\", "\\\\")
-                .replace("\"", "\\\"")
-                .replace("\n", "")
-                .replace("\r", "")
-
-            val javascriptString = """
-                javascript:window.receiveImage("data:image/jpeg;base64,$sanitizedBase64Image");
-            """.trimIndent()
-
-            Log.d("원본 길이",base64Image.length.toString())
-            Log.d("수정 후 길이",javascriptString.length.toString())
-            webView.post {
-                webView.evaluateJavascript(javascriptString) { result ->
-                    Log.d("WebView", "Image transfer result: $result")
+        if (resultCode == RESULT_OK) {
+            when (requestCode) {
+                REQUEST_IMAGE_CAPTURE -> {
+                    val imageBitmap = data?.extras?.get("data") as Bitmap
+                    processAndSendImage(imageBitmap)
                 }
+                REQUEST_PICK_IMAGE -> {
+                    data?.data?.let { uri ->
+                        val inputStream: InputStream? = contentResolver.openInputStream(uri)
+                        val bitmap = BitmapFactory.decodeStream(inputStream)
+                        processAndSendImage(bitmap)
+                        inputStream?.close()
+                    }
+                }
+            }
+        }
+    }
+
+    private fun processAndSendImage(bitmap: Bitmap) {
+        val outputStream = ByteArrayOutputStream()
+        bitmap.compress(Bitmap.CompressFormat.JPEG, 100, outputStream)
+        val byteArray = outputStream.toByteArray()
+        val base64Image = Base64.encodeToString(byteArray, Base64.DEFAULT)
+
+        val sanitizedBase64Image = base64Image
+            .replace("\\", "\\\\")
+            .replace("\"", "\\\"")
+            .replace("\n", "")
+            .replace("\r", "")
+
+        val javascriptString = """
+            javascript:window.receiveImage("data:image/jpeg;base64,$sanitizedBase64Image");
+        """.trimIndent()
+
+        webView.post {
+            webView.evaluateJavascript(javascriptString) { result ->
+                Log.d("WebView", "Image transfer result: $result")
             }
         }
     }
@@ -220,19 +236,61 @@ class MainActivity : AppCompatActivity() {
     inner class WebAppInterface(private val context: Context) {
         @JavascriptInterface
         fun openCameraAndGallery() {
-            Log.d("나 지금 눌리고 있니?", "ㅇㅇㅇㅇ")
-            if (checkSelfPermission(android.Manifest.permission.CAMERA)
-                == PackageManager.PERMISSION_GRANTED) {
+            runOnUiThread {
+                val items = arrayOf("카메라로 촬영", "갤러리에서 선택")
+                AlertDialog.Builder(context)
+                    .setTitle("이미지 선택")
+                    .setItems(items) { dialog, which ->
+                        when (which) {
+                            0 -> checkCameraPermission()
+                            1 -> checkStoragePermission()
+                        }
+                    }
+                    .show()
+            }
+        }
+    }
 
-                startCamera()
+    private fun checkCameraPermission() {
+        if (checkSelfPermission(Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
+            startCamera()
+        } else {
+            requestPermissions(arrayOf(Manifest.permission.CAMERA), CAMERA_PERMISSION_CODE)
+        }
+    }
+
+    private fun checkStoragePermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            // Android 13 이상에서는 READ_MEDIA_IMAGES 권한 필요
+            if (checkSelfPermission(Manifest.permission.READ_MEDIA_IMAGES) == PackageManager.PERMISSION_GRANTED) {
+                openGallery()
             } else {
-                requestPermissions(
-                    arrayOf(android.Manifest.permission.CAMERA),
-                    CAMERA_PERMISSION_CODE
+                // ActivityCompat.requestPermissions 사용
+                ActivityCompat.requestPermissions(
+                    this,
+                    arrayOf(Manifest.permission.READ_MEDIA_IMAGES),
+                    STORAGE_PERMISSION_CODE
+                )
+            }
+        } else {
+            // Android 13 미만에서는 READ_EXTERNAL_STORAGE 권한 필요
+            if (checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED) {
+                openGallery()
+            } else {
+                ActivityCompat.requestPermissions(
+                    this,
+                    arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE),
+                    STORAGE_PERMISSION_CODE
                 )
             }
         }
     }
+
+    private fun openGallery() {
+        val intent = Intent(Intent.ACTION_PICK, MediaStore.Images.Media.EXTERNAL_CONTENT_URI)
+        startActivityForResult(intent, REQUEST_PICK_IMAGE)
+    }
+
 
     private fun startCamera() {
         val intent = Intent(MediaStore.ACTION_IMAGE_CAPTURE)
@@ -245,12 +303,18 @@ class MainActivity : AppCompatActivity() {
         permissions: Array<out String>,
         grantResults: IntArray
     ) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (requestCode == CAMERA_PERMISSION_CODE) {
-            if (grantResults.isNotEmpty() &&
-                grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                startCamera()
+        when (requestCode) {
+            CAMERA_PERMISSION_CODE -> {
+                if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                    startCamera()
+                }
             }
+            STORAGE_PERMISSION_CODE -> {
+                if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                    openGallery()
+                }
+            }
+            else -> super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         }
     }
 
