@@ -28,8 +28,11 @@ import android.webkit.WebViewClient
 import android.widget.ImageView
 import android.widget.Toast
 import android.Manifest
+import android.app.AlertDialog
 import android.graphics.Bitmap
 import android.util.Base64
+import android.webkit.JsResult
+import android.webkit.WebChromeClient
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.InputStream
@@ -86,6 +89,28 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+        webView.webChromeClient = object : WebChromeClient() {
+            override fun onJsAlert(
+                view: WebView?,
+                url: String?,
+                message: String?,
+                result: JsResult
+            ): Boolean {
+                // AlertDialog 생성
+                AlertDialog.Builder(this@MainActivity)
+                    .setTitle("Alert")
+                    .setMessage(message)
+                    .setPositiveButton("OK") { dialog, _ ->
+                        dialog.dismiss()
+                        result.confirm() // JS alert에 대한 확인 응답
+                    }
+                    .setCancelable(false) // 다이얼로그가 취소 불가능하게 설정
+                    .show()
+                return true // true를 반환하여 JS alert을 처리했음을 알림
+            }
+        }
+
+
         webView.webViewClient = object : WebViewClient() {
             override fun onPageFinished(view: WebView?, url: String?) {
                 super.onPageFinished(view, url)
@@ -96,6 +121,22 @@ class MainActivity : AppCompatActivity() {
                     "(function() { return !!window.receiveImage; })()",
                     { result -> Log.d("WebView", "receiveImage exists: $result") }
                 )
+            }
+
+            override fun shouldOverrideUrlLoading(view: WebView?, url: String?): Boolean {
+                // intent:// 스킴 처리
+                if (url != null && url.startsWith("intent://")) {
+                    try {
+                        // 인텐트 URL을 처리하기 위해 인텐트를 생성
+                        val intent = Intent.parseUri(url, Intent.URI_INTENT_SCHEME)
+                        startActivity(intent)
+                        return true // 웹뷰에서 처리하지 않음
+                    } catch (e: Exception) {
+                        Log.e("WebView", "Error parsing intent URL: $e")
+                        return false // 웹뷰에서 처리하도록 함
+                    }
+                }
+                return super.shouldOverrideUrlLoading(view, url)
             }
         }
 
